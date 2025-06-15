@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# 获取源文件夹路径
+read -p "Enter the source directory containing the instances: " source_dir
+source_dir=$(realpath "$source_dir")
+
+# 获取输出文件夹路径
+read -p "Enter the output directory: " output_dir
+output_dir=$(realpath "$output_dir")
+mkdir -p "$output_dir"
+
+# 获取cutoff值
+read -p "Enter the cutoff value: " cutoff
+
+# 获取txt文件列表
+txt_files=()
+echo "Enter the paths to txt files (one per line, press Enter twice to finish):"
+while true; do
+    read -p "> " txt_file
+    if [[ -z "$txt_file" ]]; then
+        break
+    fi
+    txt_files+=("$txt_file")
+done
+
+# 检查bin目录和可执行文件
+if [[ ! -d "bin" ]]; then
+    echo "Error: 'bin' directory not found!"
+    exit 1
+fi
+
+if [[ ! -f "bin/Local-MIP" ]]; then
+    echo "Error: 'Local-MIP' executable not found in bin directory!"
+    exit 1
+fi
+
+# 添加执行权限
+chmod a+x "bin/Local-MIP"
+
+# 处理每个txt文件
+for txt_file in "${txt_files[@]}"; do
+    # 获取纯文件名（不含路径和扩展名）
+    txt_basename=$(basename "$txt_file")
+    txt_name="${txt_basename%.*}"
+
+    # 创建对应子文件夹
+    subfolder="${output_dir}/${txt_name}"
+    mkdir -p "$subfolder"
+
+    echo "Processing file: $txt_file"
+    echo "Output folder: $subfolder"
+
+    # 逐行处理每个实例文件
+    while IFS= read -r instance || [[ -n "$instance" ]]; do
+        # 去除可能的回车和空格
+        instance=$(echo "$instance" | tr -d '\r' | xargs)
+
+        if [[ -z "$instance" ]]; then
+            continue
+        fi
+
+        # 检查源文件是否存在
+        instance_path="${source_dir}/${instance}"
+        if [[ ! -f "$instance_path" ]]; then
+            echo "  WARNING: Instance file not found: $instance"
+            continue
+        fi
+
+        # 准备输出日志文件名
+        log_name=$(basename "$instance")
+        log_name="${log_name%.*}.log"  # 保留原始文件名，替换扩展名为.log
+        log_file="${subfolder}/${log_name}"
+
+        echo "  Running instance: $instance"
+
+        # 执行命令并捕获输出
+        (
+            cd bin
+            ./Local-MIP --instance="$instance_path" --cutoff="$cutoff"
+        ) > "$log_file" 2>&1
+
+        echo "  Output saved to: $log_file"
+
+    done < "$txt_file"
+done
+
+echo "All tasks completed!"
